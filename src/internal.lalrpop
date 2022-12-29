@@ -1,0 +1,11 @@
+use crate::document::{Document, Node};
+
+grammar;
+
+pub Document: Document = {
+    "/**" <nodes:Node*> "*/" => Document { nodes }   
+}
+
+Node: Node = {
+
+}
