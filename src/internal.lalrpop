@@ -1,4 +1,4 @@
-use crate::document::{Document, Node};
+use crate::document::{Document, Node, Type, Variable};
 
 grammar;
 
@@ -7,5 +7,19 @@ pub Document: Document = {
 }
 
 Node: Node = {
+    <tag:ParamTag> <_type:Type?> <variable:Variable> => Node::ParamTag { tag, _type, variable }
+}
 
+Variable: Variable = {
+    "$" <name:r"[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*"> => Variable { name: name.to_string(), reference: false, variadic: false },
+}
+
+pub Type: Type = {
+    
+}
+
+ParamTag: String = {
+    "@param" => "param".to_string(),
+    "@phpstan-param" => "phpstan-param".to_string(),
+    "@psalm-param" => "psalm-param".to_string(),
 }
