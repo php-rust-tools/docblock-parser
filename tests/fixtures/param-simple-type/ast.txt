@@ -1,0 +1,16 @@
+Doc {
+    nodes: [
+        Tag(
+            Param {
+                name: "@param",
+                type: Some(
+                    Identifier(
+                        "int",
+                    ),
+                ),
+                variable: "$number",
+                description: None,
+            },
+        ),
+    ],
+}

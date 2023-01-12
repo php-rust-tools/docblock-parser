@@ -1,0 +1,14 @@
+Doc {
+    nodes: [
+        Tag(
+            Param {
+                name: "@param",
+                type: None,
+                variable: "$var",
+                description: Some(
+                    "This is a parameter.",
+                ),
+            },
+        ),
+    ],
+}

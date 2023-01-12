@@ -1,4 +1,4 @@
-use crate::{bytestring::ByteString, doc::Doc, node::Node};
+use crate::{bytestring::ByteString, doc::Doc, node::Node, tag::Tag, r#type::Type, ident_start, ident};
 
 pub fn parse<B: ?Sized + AsRef<[u8]>>(input: &B) -> Doc {
     let input = input.as_ref().to_vec();
@@ -45,7 +45,7 @@ pub fn parse<B: ?Sized + AsRef<[u8]>>(input: &B) -> Doc {
             _ if starts_with_any_of(&line, &[b"@param", b"@phpstan-param", b"@psalm-param"]) => {
                 nodes.push(parse_param_tag(line))
             }
-            _ if starts_with_any_of(&line, &[b"@property", b"@property-read", b"@property-write", b"@phpstan-property", b"@phpstan-property-read", b"@phpstan-property-write", b"@psalm-property", b"@psalm-property-read", b"@psalm-property-write"]) {
+            _ if starts_with_any_of(&line, &[b"@property", b"@property-read", b"@property-write", b"@phpstan-property", b"@phpstan-property-read", b"@phpstan-property-write", b"@psalm-property", b"@psalm-property-read", b"@psalm-property-write"]) => {
                 nodes.push(parse_property_tag(line))
             }
             _ if starts_with_any_of(&line, &[b"@method", b"@phpstan-method", b"@psalm-method"]) => {
@@ -152,8 +152,136 @@ fn parse_var_tag(line: Vec<u8>) -> Node {
     todo!()
 }
 
-fn parse_param_tag(line: Vec<u8>) -> Node {
-    todo!()
+fn parse_param_tag(mut line: Vec<u8>) -> Node {
+    let name = skip_over_any_of(&mut line, &[b"@param", b"@phpstan-param", b"@psalm-param"]);
+    skip_whitespace(&mut line);
+
+    let r#type = parse_optional_type(&mut line);
+    skip_whitespace(&mut line);
+
+    // FIXME: Also need to check for variadic / reference parameters here.
+    let variable = read_required_variable(&mut line);
+    skip_whitespace(&mut line);
+
+    let description = read_optional_description(&mut line);
+
+    Node::Tag(Tag::Param { name, r#type, variable, description })
+}
+
+fn parse_optional_type(line: &mut Vec<u8>) -> Option<Type> {
+    if ! can_see_type_string(line) {
+        return None;
+    }
+    
+    if let Some(identifier) = try_read_identifier(line) {
+        // FIXME: We can be smarter here and convert native types into dedicated enum members.
+        let mut _type = Type::Identifier(identifier);
+        Some(_type)
+    } else {
+        todo!()
+    }
+}
+
+fn try_read_identifier(line: &mut Vec<u8>) -> Option<ByteString> {
+    if ! matches!(line[0], ident_start!()) {
+        return None;
+    }
+
+    let mut bytes = Vec::new();
+
+    bytes.push(line[0]);
+    line.drain(..1);
+
+    loop {
+        if line.is_empty() {
+            break;
+        }
+
+        if matches!(line[0], ident!()) {
+            bytes.push(line[0]);
+            line.drain(..1);
+        } else {
+            break;
+        }
+    }
+    
+    Some(bytes.into())
+}
+
+// FIXME: Description for some tags could span multiple lines.
+//        Will need to add support for this eventually, it could
+//        probably be done with a second pass over the AST to squash
+//        text nodes down with their previous sibling.
+fn read_optional_description(line: &mut Vec<u8>) -> Option<ByteString> {
+    let mut bytes = Vec::new();
+    
+    if line.is_empty() {
+        return None;
+    }
+
+    while !line.is_empty() {
+        match line[0] {
+            b'\n' => break,
+            _ => {
+                bytes.push(line[0]);
+                line.drain(..1);
+            },
+        }
+    }
+
+    if bytes.is_empty() { None } else { Some(bytes.into()) }
+}
+
+fn skip_over_any_of(line: &mut Vec<u8>, patterns: &[&[u8]]) -> ByteString {
+    for pattern in patterns {
+        if line.starts_with(pattern) {
+            return ByteString::from(line.drain(..pattern.len()).collect::<Vec<u8>>());
+        }
+    }
+
+    unreachable!()
+}
+
+fn can_see_type_string(line: &[u8]) -> bool {
+    match line[..2] {
+        [b'$', b'a'..=b'z' | b'A'..=b'Z' | b'_' | b'\x80'..=b'\xff'] => false,
+        _ => true,
+    }
+}
+
+fn read_required_variable(line: &mut Vec<u8>) -> ByteString {
+    let mut bytes = Vec::new();
+
+    match line[..2] {
+        [b'$', ident_start!()] => {
+            bytes.push(line[0]);
+            bytes.push(line[1]);
+            line.drain(..2);
+        },
+        _ => panic!("bad variable. FIXME: Be more tolerant and return an error instead.")
+    };
+
+    loop {
+        if line.is_empty() {
+            break;
+        }
+
+        match line[0] {
+            ident!() => {
+                bytes.push(line[0]);
+                line.drain(..1);
+            },
+            _ => break,
+        }
+    }
+
+    bytes.into()
+}
+
+fn skip_whitespace(line: &mut Vec<u8>) {
+    while line.starts_with(b" ") {
+        line.drain(..1);
+    }
 }
 
 fn tidy_up_line(line: &mut Vec<u8>) {
